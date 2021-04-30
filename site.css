@@ -23,6 +23,10 @@ body{
     left: calc(var(--column) * var(--unit));
 }
 
+.fixedBox{
+    background-color: tomato;
+}
+
 .square {
     width: var(--unit);
     height: var(--unit);
@@ -31,5 +35,10 @@ body{
 .twotall {
     width: var(--unit);
     height: calc(var(--unit) * 2);
+}
+
+.twowide {
+    width: calc(var(--unit) * 2);
+    height: var(--unit);
 }
 
