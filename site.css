@@ -1,0 +1,35 @@
+:root{
+    --unit : 150px;
+    --boxColor: #559;
+}
+body{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#gameContainer{
+    width: calc(var(--unit) * 5);
+    height: calc(var(--unit) * 4);
+    border: 3px solid black;
+    position: relative;
+}
+
+.box{
+    background-color: var(--boxColor);
+    border: 3px solid white;
+    box-sizing: border-box;
+    position: absolute;
+    top: calc(var(--line) * var(--unit));
+    left: calc(var(--column) * var(--unit));
+}
+
+.square {
+    width: var(--unit);
+    height: var(--unit);
+}
+
+.twotall {
+    width: var(--unit);
+    height: calc(var(--unit) * 2);
+}
+
