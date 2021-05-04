@@ -26,6 +26,10 @@ class Game {
         this.map[line][column] = box;
     }
 
+    getSpace(line, column) {
+        return this.map[line][column];
+    }
+
     cloneMap() {
         return this.map.map(line => [...line]);
     }
@@ -98,9 +102,7 @@ class Box {
             return false;
         var currentSpaces = this.getCurrentSpaces();
         var nextSpaces = currentSpaces.map(s => addV(s, direction))
-        currentSpaces.forEach(space => {
-            this.game.clearSpace(...space)
-        })
+        this.removeFromGame();
         if (nextSpaces.some(s => !this.game.isFree(...s))) {
             currentSpaces.forEach(space => {
                 this.game.setSpace(this, ...space);
@@ -112,6 +114,13 @@ class Box {
         });
         this.line += direction[0];
         this.column += direction[1];
+        return true;
+    }
+
+    removeFromGame() {
+        this.getCurrentSpaces().forEach(space => {
+            this.game.clearSpace(...space)
+        })
     }
 
     getClassNames(line, column) {
@@ -167,12 +176,63 @@ class RodBox extends BoxTwoWide {
         }
         return classNames;
     }
+
+    move(direction) {
+        if (super.move(direction)) {
+            return true;
+        }
+        this.moveRod(direction);
+    }
+
+    moveRod(direction) {
+        if (direction !== this.rodDirection) {
+            return;
+        }
+        if (!this.isFixed) {
+            this.splitRodBox();
+        }
+        let closeSpaceCoords = addV([this.line, this.column], direction);
+        if (direction === RIGHT) {
+            closeSpaceCoords = addV(closeSpaceCoords, direction);
+        }
+        let closeSpace = this.game.getSpace(...closeSpaceCoords);
+        if (!closeSpace.isSegment && closeSpace.rodDirection && closeSpace.rodDirection != direction) {
+            closeSpace.hasRod = true;
+        } else {
+            let farSpaceCoords = addV(closeSpaceCoords, direction);
+            let farSpace = this.game.getSpace(...farSpaceCoords);
+            if (!this.isFixed && closeSpace.rodDirection && closeSpace.rodDirection != direction) {
+                farSpaceCoords = closeSpaceCoords;
+                closeSpaceCoords = addV(closeSpaceCoords, closeSpace.rodDirection);
+                farSpace = closeSpace;
+                closeSpace = this.game.getSpace(...closeSpaceCoords);
+            }
+            if (closeSpace.type != RODBOXSEGMENTMIDDLE || (farSpace.rodDirection && farSpace.rodDirection === direction)) {
+                return;
+            }
+
+            this.game.clearSpace(...closeSpaceCoords);
+            this.game.clearSpace(...farSpaceCoords);
+            let startCoords = closeSpaceCoords[1] < farSpaceCoords[1] ? closeSpaceCoords : farSpaceCoords;
+            direction === RIGHT ? new RodBoxLeft(this.game, startCoords[0], startCoords[1], false, true) :
+                new RodBoxRight(this.game, startCoords[0], startCoords[1], false, true)
+
+        }
+        this.hasRod = false;
+    }
 }
 
 class RodBoxRight extends RodBox {
     initialize() {
         this.type = RODBOXRIGHT;
         this.extraClasses.push(RODBOXRIGHT, TWOWIDE);
+        this.rodDirection = RIGHT;
+    }
+
+    splitRodBox() {
+        this.removeFromGame();
+        new RodBoxRightSegment(this.game, this.line, this.column);
+        new RodBoxMiddleSegment(this.game, this.line, this.column + 1)
     }
 }
 
@@ -180,6 +240,13 @@ class RodBoxLeft extends RodBox {
     initialize() {
         this.type = RODBOXLEFT;
         this.extraClasses.push(RODBOXLEFT, TWOWIDE);
+        this.rodDirection = LEFT;
+    }
+
+    splitRodBox() {
+        this.removeFromGame();
+        new RodBoxMiddleSegment(this.game, this.line, this.column);
+        new RodBoxLeftSegment(this.game, this.line, this.column + 1)
     }
 }
 
@@ -194,23 +261,28 @@ class RodBoxSegment extends Box {
 }
 
 class RodBoxRightSegment extends RodBoxSegment {
-    initialize(){
+    initialize() {
         this.type = RODBOXSEGMENTRIGHT
         this.extraClasses.push(RODBOXRIGHT, SQUARE)
+        this.rodDirection = RIGHT;
+        this.isSegment = true;
     }
 }
 
 class RodBoxLeftSegment extends RodBoxSegment {
-    initialize(){
+    initialize() {
         this.type = RODBOXSEGMENTLEFT
         this.extraClasses.push(RODBOXLEFT, SQUARE)
+        this.rodDirection = LEFT;
+        this.isSegment = true;
     }
 }
 
 class RodBoxMiddleSegment extends RodBoxSegment {
-    initialize(){
+    initialize() {
         this.type = RODBOXSEGMENTMIDDLE
         this.extraClasses.push(RODBOXMIDDLE, SQUARE)
+        this.isSegment = true;
     }
 }
 
@@ -219,7 +291,7 @@ function start() {
     let game = new Game(renderer);
     initializeDragHandlers(game);
     new BoxTwoTall(game, 0, 0);
-    new RodBoxRight(game, 0, 1, true, true);
+    new RodBoxRight(game, 0, 1, false, true);
     new RodBoxMiddleSegment(game, 0, 3);
     new RodBoxLeftSegment(game, 0, 4);
     new Box(game, 1, 1);
