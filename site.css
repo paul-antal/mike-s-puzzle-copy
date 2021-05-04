@@ -42,3 +42,37 @@ body{
     height: var(--unit);
 }
 
+.rodBox::before {
+    content: ' ';
+    background-color: white;
+    display: block;
+    width: calc(100% - var(--unit)/4);
+    height: 30%;
+    position: absolute;
+    top: 35%;
+}
+
+.rodBox.hasRod::after {
+    content: ' ';
+    background-color: tomato;
+    display: block;
+    width: calc(100% - var(--unit)/4 - 5px);
+    height: 24%;
+    position: absolute;
+    top: 38%;
+}
+
+.rodBoxMiddle::before{
+    width: 101%;
+    left: -1;
+}
+
+.rodBoxLeft::before, .rodBoxLeft::after {
+    left: -1;
+}
+
+.rodBoxRight::before, .rodBoxRight::after {
+    right: -1;
+}
+
+
