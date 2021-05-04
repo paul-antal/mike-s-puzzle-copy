@@ -232,7 +232,7 @@ class RodBox extends BoxTwoWide {
         if (closeSpace.isSegment) {
             let farSpaceCoords = addV(closeSpaceCoords, direction);
             let farSpace = this.game.getSpace(...farSpaceCoords);
-            if (!this.isFixed && closeSpace.rodDirection && closeSpace.rodDirection === direction) {
+            if (!this.isFixed && closeSpace.rodDirection && closeSpace.rodDirection !== direction) {
                 farSpaceCoords = closeSpaceCoords;
                 closeSpaceCoords = addV(closeSpaceCoords, closeSpace.rodDirection);
                 farSpace = closeSpace;
@@ -329,15 +329,15 @@ function start() {
     initializeDragHandlers(game);
     new BoxTwoTall(game, 0, 0);
     new RodBoxRight(game, 0, 1, true, true);
-    new RodBoxMiddleSegment(game, 0, 3);
-    new RodBoxLeftSegment(game, 0, 4);
+    new Box(game, 0, 3);
+    new Box(game, 0, 4);
     new Box(game, 1, 1);
-    new Box(game, 1, 4);
+    new RodBoxMiddleSegment(game, 1, 4);
     new Box(game, 2, 0);
-    new Box(game, 2, 1);
+    new RodBoxLeftSegment(game, 2, 1);
     new BoxTwoWide(game, 2, 2);
     new BoxTwoTall(game, 2, 4);
-    new Box(game, 3, 0);
+    new RodBoxRightSegment(game, 3, 0);
     new Box(game, 3, 1);
     new RodBoxLeft(game, 3, 2, true);
     game.draw();
