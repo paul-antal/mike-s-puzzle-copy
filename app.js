@@ -12,22 +12,29 @@ class Game {
     constructor(renderer) {
         this.map = [[], [], [], []]
         this.renderer = renderer;
+        this.blocks = new Set();
+    }
+
+    isCoordinateInMap(line, column) {
+        return line >= 0 && line < 4 && column >= 0 && column < 5
     }
 
     isFree(line, column) {
-        return line >= 0 && line < 4 && column >= 0 && column < 5 && !this.map[line][column];
+        return this.isCoordinateInMap(line, column) && !this.map[line][column];
     }
 
     clearSpace(line, column) {
+        this.blocks.delete(this.map[line][column]);
         this.map[line][column] = undefined;
     }
 
     setSpace(box, line, column) {
         this.map[line][column] = box;
+        this.blocks.add(box);
     }
 
     getSpace(line, column) {
-        return this.map[line][column];
+        return this.isCoordinateInMap(line, column) && this.map[line][column];
     }
 
     cloneMap() {
@@ -35,11 +42,36 @@ class Game {
     }
 
     move(line, column, direction) {
-        this.map[line][column].move(direction)
+        return this.map[line][column].move(direction)
     }
 
     draw() {
-        this.renderer.draw(this.map);
+        if (this.renderer)
+            this.renderer.draw(this.map);
+    }
+
+    getBlocks() {
+        return this.blocks;
+    }
+
+    getStateString() {
+        let stateString = '';
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 5; j++) {
+                let box = this.map[i][j];
+                if (box && box.isOriginPosition(i, j))
+                    stateString += box.getStateString();
+            }
+        }
+        return stateString;
+    }
+
+    setCompletedCondition(condition) {
+        this.isCompletedCondition = condition;
+    }
+
+    isCompleted() {
+        return this.isCompletedCondition();
     }
 }
 
@@ -54,17 +86,15 @@ class HtmlRenderer {
         for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 5; j++) {
                 let box = map[i][j];
-                if (!box)
+                if (!box || !box.isOriginPosition(i, j))
                     continue;
                 let classNames = box.getClassNames(i, j);
-                if (classNames) {
-                    let element = document.createElement('div');
-                    element.classList.add('box');
-                    element.classList.add(...classNames);
-                    element.style.setProperty('--line', i);
-                    element.style.setProperty('--column', j);
-                    container.appendChild(element);
-                }
+                let element = document.createElement('div');
+                element.classList.add('box');
+                element.classList.add(...classNames);
+                element.style.setProperty('--line', i);
+                element.style.setProperty('--column', j);
+                container.appendChild(element);
             }
         }
     }
@@ -74,6 +104,7 @@ const UP = [-1, 0];
 const DOWN = [1, 0];
 const LEFT = [0, -1];
 const RIGHT = [0, 1];
+const DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
 
 function addV(coords1, coords2) {
     return coords1.map((c1, i) => c1 + coords2[i]);
@@ -90,6 +121,10 @@ class Box {
             this.game.setSpace(this, ...space);
         });
         this.initialize();
+    }
+
+    getStateString() {
+        return `##${this.line}-${this.column}-${this.type}##`
     }
 
     initialize() {
@@ -132,10 +167,13 @@ class Box {
         })
     }
 
+    isOriginPosition(line, column) {
+        return line === this.line && column === this.column
+    }
+
     getClassNames(line, column) {
-        if (line != this.line || column != this.column) {
-            return
-        }
+        if (!this.isOriginPosition(line, column))
+            return;
         let classNames = [this.type];
         if (this.isFixed) {
             classNames.push('fixedBox');
@@ -198,6 +236,9 @@ class RodBox extends BoxTwoWide {
     }
 
     canMoveRod(direction) {
+        if(!this.hasRod){
+            return false;
+        }
         if (direction !== this.rodDirection) {
             return false;
         }
@@ -205,19 +246,25 @@ class RodBox extends BoxTwoWide {
         let closeSpace = this.game.getSpace(...closeSpaceCoords);
         if (!closeSpace)
             return false;
-        if (!closeSpace.isSegment && closeSpace.rodDirection && closeSpace.rodDirection === direction)
-            return false;
-
-        let farSpaceCoords = addV(closeSpaceCoords, direction);
-        let farSpace = this.game.getSpace(...farSpaceCoords);
-        if (closeSpace.type === RODBOXSEGMENTMIDDLE && farSpace.rodDirection && farSpace.rodDirection === direction) {
-            return false;
+        if (!closeSpace.isSegment) {
+            if (!closeSpace.rodDirection || closeSpace.rodDirection === direction)
+                return false;
+        } else {
+            if (closeSpace.type === RODBOXSEGMENTMIDDLE) {
+                let farSpaceCoords = addV(closeSpaceCoords, direction);
+                let farSpace = this.game.getSpace(...farSpaceCoords);
+                if (!farSpace || !farSpace.isSegment || !farSpace.rodDirection || farSpace.rodDirection === direction)
+                    return false;
+            } else {
+                if(this.isFixed){
+                    return false;
+                }
+                if(!closeSpace.rodDirection || closeSpace.rodDirection === direction){
+                    return false;
+                }
+            }
         }
-        if (!this.isFixed && (!closeSpace.rodDirection || closeSpace.rodDirection === direction))
-            return false;
 
-        if (this.isFixed && closeSpace.rodDirection && closeSpace.rodDirection !== direction)
-            return false;
         return true;
     }
 
@@ -324,9 +371,22 @@ class RodBoxMiddleSegment extends RodBoxSegment {
 }
 
 function start() {
-    let renderer = new HtmlRenderer(GAMECONTAINERID);
-    let game = new Game(renderer);
-    initializeDragHandlers(game);
+    startTestPlayground();
+}
+
+function startTestPlayground() {
+    let game = initializeActualGame();
+    //initializeDragHandlers(game);
+    //game.draw();
+    let solver = new PuzzleSolver(() => initializeActualGame())
+    //window.addEventListener('keypress', () => { solver.runStep() })
+    solver.solve();
+    console.log(game.getBlocks());
+}
+
+function initializeActualGame() {
+    //let renderer = new HtmlRenderer(GAMECONTAINERID);
+    let game = new Game();
     new BoxTwoTall(game, 0, 0);
     new RodBoxRight(game, 0, 1, true, true);
     new Box(game, 0, 3);
@@ -339,9 +399,154 @@ function start() {
     new BoxTwoTall(game, 2, 4);
     new RodBoxRightSegment(game, 3, 0);
     new Box(game, 3, 1);
-    new RodBoxLeft(game, 3, 2, true);
-    game.draw();
+    let final = new RodBoxLeft(game, 3, 2, true);
+    game.setCompletedCondition(() => final.hasRod);
+    return game;
 }
+
+function initializeTestGame() {
+    let renderer = new HtmlRenderer(GAMECONTAINERID);
+    let game = new Game(renderer);
+    new RodBoxRight(game, 0, 1, true, true);
+    new Box(game, 0, 3);
+    new RodBoxMiddleSegment(game, 1, 4);
+    new RodBoxLeftSegment(game, 2, 1);
+    new BoxTwoWide(game, 2, 2);
+    new BoxTwoTall(game, 2, 4);
+    new RodBoxRightSegment(game, 3, 0);
+    let finish = new RodBoxLeft(game, 3, 2, true);
+    game.setCompletedCondition(() => finish.hasRod)
+    return game;
+}
+
+class PuzzleSolver {
+    constructor(createGameFunction) {
+        this.createGame = createGameFunction;
+        this.visitedStates = new Set();
+        //this.refreshPromise();
+        this.shortestResult;
+        this.totalSteps = 0;
+        this.statesRereached = 0;
+    }
+
+    updateScreen(currentDepth){
+        if(this.shortestResult){
+            document.getElementById('longestSolution').innerHTML = this.shortestResult.length;
+        }
+        if(this.visitedStates){
+            document.getElementById('statesReached').innerHTML = this.visitedStates.size;
+        }
+        if(this.statesRereached){
+            document.getElementById('statesRereached').innerHTML = this.statesRereached;
+        }
+        if(this.totalSteps){
+            document.getElementById('totalSteps').innerHTML = this.totalSteps;
+        }
+        if(currentDepth){
+            document.getElementById('currentDepth').innerHTML = currentDepth;
+        }
+    }
+
+    writeToConsole(currentDepth){
+        let shortestResultLength = this.shortestResult && this.shortestResult.length
+        console.log(`total steps: ${this.totalSteps}, current depth: ${currentDepth},shortest solution: ${shortestResultLength}, states reached: ${this.visitedStates.size}, `)
+    }
+
+    runMoves(moves) {
+        let game = this.createGame();
+        for (let move of moves) {
+            game.move(move.line, move.column, move.direction);
+        }
+        return game;
+    }
+
+    refreshPromise(game, currentDepth) {
+        this.promise = new Promise((resolve, reject) => {
+            this.resolve = resolve;
+        })
+        if(this.totalSteps % 2000000){
+            this.resolve();
+            return;
+        }
+        this.updateScreen(currentDepth);
+        if(game)
+            game.draw();
+    }
+
+    runStep() {
+        this.resolve();
+    }
+
+    async solve() {
+        let solution = await this.recursiveStep([])
+        console.log(solution);
+    }
+
+    async recursiveStep(moves) {
+        let game = this.runMoves(moves);
+        //await this.promise;
+        //this.refreshPromise(game, moves.length);
+        if(this.totalSteps % 1000 === 0)
+            this.writeToConsole(moves.length)
+        this.totalSteps++;
+        let state = game.getStateString();
+        if (game.isCompleted()) {
+            console.log('found solution')
+            if (!this.shortestResult || this.shortestResult.length > moves) {
+                this.shortestResult = moves;
+            }
+            this.visitedStates.add(state);
+            return;
+        }
+        if (this.visitedStates.has(state)) {
+            this.statesRereached ++;
+            return false;
+        }
+        if(this.shortestResult && this.shortestResult.length < moves.length || moves.length > 1000){
+            this.visitedStates.add(state);
+
+            return false;
+        }
+        this.visitedStates.add(state);
+        let possibleMoves = this.getPossibleMoves(game);
+        shuffle(possibleMoves);
+        for (let move of possibleMoves) {
+            await this.recursiveStep([...moves, move]);
+        }
+    }
+
+    getPossibleMoves(game) {
+        let possibleMoves = [];
+        let blocks = game.getBlocks();
+        for (let block of blocks) {
+            for (let direction of DIRECTIONS) {
+                if (block.isMoveValid(direction)) {
+                    possibleMoves.push({ line: block.line, column: block.column, direction });
+                }
+            }
+        }
+        return possibleMoves;
+    }
+}
+
+function shuffle(array) {
+    var currentIndex = array.length, temporaryValue, randomIndex;
+  
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+  
+      // Pick a remaining element...
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex -= 1;
+  
+      // And swap it with the current element.
+      temporaryValue = array[currentIndex];
+      array[currentIndex] = array[randomIndex];
+      array[randomIndex] = temporaryValue;
+    }
+  
+    return array;
+  }
 
 function initializeDragHandlers(game) {
     let container = document.getElementById(GAMECONTAINERID);
@@ -388,3 +593,5 @@ function getDirection(element, x, y) {
             return UP;
     }
 }
+console.log('starting')
+start();

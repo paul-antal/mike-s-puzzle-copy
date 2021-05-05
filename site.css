@@ -6,7 +6,15 @@ body{
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-direction: column;
 }
+
+span {
+    font-size: 20px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bolder;
+}
+
 #gameContainer{
     width: calc(var(--unit) * 5);
     height: calc(var(--unit) * 4);
