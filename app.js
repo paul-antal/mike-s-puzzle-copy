@@ -213,6 +213,10 @@ class RodBox extends BoxTwoWide {
         this.extraClasses.push('RODBOX');
     }
 
+    getStateString() {
+        return `##${this.line}-${this.column}-${this.type}-${this.hasRod}##`
+    }
+
     getClassNames(line, column) {
         var classNames = super.getClassNames(line, column);
         if (classNames) {
@@ -375,54 +379,26 @@ function start() {
 }
 
 function startTestPlayground() {
-    let game = initializeActualGame();
-    //initializeDragHandlers(game);
-    //game.draw();
-    let solver = new PuzzleSolver(() => initializeActualGame())
-    //window.addEventListener('keypress', () => { solver.runStep() })
-    solver.solve();
+    let renderer = new HtmlRenderer(GAMECONTAINERID);
+    let game = initializeActualGame(renderer);
+    initializeDragHandlers(game);
+    game.draw();
+    window.addEventListener('keypress', () => { solver.runStep() })
     console.log(game.getBlocks());
 }
 
-function initializeActualGame() {
-    //let renderer = new HtmlRenderer(GAMECONTAINERID);
-    let game = new Game();
-    new BoxTwoTall(game, 0, 0);
-    new RodBoxRight(game, 0, 1, true, true);
-    new Box(game, 0, 3);
-    new Box(game, 0, 4);
-    new Box(game, 1, 1);
-    new RodBoxMiddleSegment(game, 1, 4);
-    new Box(game, 2, 0);
-    new RodBoxLeftSegment(game, 2, 1);
-    new BoxTwoWide(game, 2, 2);
-    new BoxTwoTall(game, 2, 4);
-    new RodBoxRightSegment(game, 3, 0);
-    new Box(game, 3, 1);
-    let final = new RodBoxLeft(game, 3, 2, true);
-    game.setCompletedCondition(() => final.hasRod);
-    return game;
+function startNodeJS(){
+    let game = initializeActualGame();
+    game.draw();
+    let solver = new PuzzleSolver(() => initializeActualGame())
+    solver.solve();
+    console.log(game.getBlocks());
 }
-
-function initializeTestGame() {
-    let renderer = new HtmlRenderer(GAMECONTAINERID);
-    let game = new Game(renderer);
-    new RodBoxRight(game, 0, 1, true, true);
-    new Box(game, 0, 3);
-    new RodBoxMiddleSegment(game, 1, 4);
-    new RodBoxLeftSegment(game, 2, 1);
-    new BoxTwoWide(game, 2, 2);
-    new BoxTwoTall(game, 2, 4);
-    new RodBoxRightSegment(game, 3, 0);
-    let finish = new RodBoxLeft(game, 3, 2, true);
-    game.setCompletedCondition(() => finish.hasRod)
-    return game;
-}
-
 class PuzzleSolver {
     constructor(createGameFunction) {
         this.createGame = createGameFunction;
         this.visitedStates = new Set();
+        this.visitedStateDepth = {};
         //this.refreshPromise();
         this.shortestResult;
         this.totalSteps = 0;
@@ -477,9 +453,16 @@ class PuzzleSolver {
         this.resolve();
     }
 
+    updateVisitedState(state, depth){
+        this.visitedStates.add(state);
+        if(!this.visitedStateDepth[state] || this.visitedStateDepth[state] > depth){
+            this.visitedStateDepth[state] = depth;
+        }
+    }
+
     async solve() {
         let solution = await this.recursiveStep([])
-        console.log(solution);
+        console.log(this.shortestResult);
     }
 
     async recursiveStep(moves) {
@@ -490,24 +473,22 @@ class PuzzleSolver {
             this.writeToConsole(moves.length)
         this.totalSteps++;
         let state = game.getStateString();
-        if (game.isCompleted()) {
-            console.log('found solution')
-            if (!this.shortestResult || this.shortestResult.length > moves) {
-                this.shortestResult = moves;
-            }
-            this.visitedStates.add(state);
-            return;
-        }
-        if (this.visitedStates.has(state)) {
+        if (this.visitedStates.has(state) && this.visitedStateDepth[state] < moves.length) {
             this.statesRereached ++;
             return false;
         }
-        if(this.shortestResult && this.shortestResult.length < moves.length || moves.length > 1000){
-            this.visitedStates.add(state);
-
+        this.updateVisitedState(state, moves.length);
+        if(this.shortestResult && this.shortestResult.length < moves.length){
+            //console.log(`going too deep - shortest: ${this.shortestResult && this.shortestResult.length} - current: ${moves.length}`)
             return false;
         }
-        this.visitedStates.add(state);
+        if (game.isCompleted()) {
+            console.log(`found solution - length ${moves.length}`)
+            if (!this.shortestResult || this.shortestResult.length > moves.length) {
+                this.shortestResult = moves;
+            }
+            return;
+        }
         let possibleMoves = this.getPossibleMoves(game);
         shuffle(possibleMoves);
         for (let move of possibleMoves) {
@@ -528,6 +509,44 @@ class PuzzleSolver {
         return possibleMoves;
     }
 }
+
+startNodeJS();
+
+function initializeSimpleGame(renderer) {
+    let game = new Game(renderer);
+    new BoxTwoTall(game, 0, 0, true);
+    new RodBoxRight(game, 0, 1, true, true);
+    new RodBoxMiddleSegment(game, 0, 3);
+    new RodBoxLeftSegment(game, 0, 4);
+    new Box(game, 2, 0, true);
+    new RodBoxRightSegment(game, 2, 1);
+    new BoxTwoWide(game, 3, 0, true);
+    new BoxTwoWide(game, 3, 2, true);
+    new BoxTwoTall(game, 2, 4);
+    let final = new RodBoxLeft(game, 2, 3, true);
+    game.setCompletedCondition(() => final.hasRod);
+    return game;
+}
+
+function initializeActualGame() {
+    let game = new Game();
+    new BoxTwoTall(game, 0, 0);
+    new RodBoxRight(game, 0, 1, true, true);
+    new Box(game, 0, 3);
+    new Box(game, 0, 4);
+    new Box(game, 1, 1);
+    new RodBoxMiddleSegment(game, 1, 4);
+    new Box(game, 2, 0);
+    new RodBoxLeftSegment(game, 2, 1);
+    new BoxTwoWide(game, 2, 2);
+    new BoxTwoTall(game, 2, 4);
+    new RodBoxRightSegment(game, 3, 0);
+    new Box(game, 3, 1);
+    let final = new RodBoxLeft(game, 3, 2, true);
+    game.setCompletedCondition(() => final.hasRod);
+    return game;
+}
+
 
 function shuffle(array) {
     var currentIndex = array.length, temporaryValue, randomIndex;
@@ -594,4 +613,4 @@ function getDirection(element, x, y) {
     }
 }
 console.log('starting')
-start();
+// start();
