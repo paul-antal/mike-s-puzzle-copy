@@ -1,4 +1,5 @@
 const GAMECONTAINERID = 'gameContainer'
+const VICTORYPROMPTID = 'victoryPrompt'
 const SQUARE = 'SQUARE';
 const TWOTALL = 'TWOTALL';
 const TWOWIDE = 'TWOWIDE';
@@ -47,7 +48,7 @@ class Game {
 
     draw() {
         if (this.renderer)
-            this.renderer.draw(this.map);
+            this.renderer.draw(this.map, this.isCompleted());
     }
 
     getBlocks() {
@@ -71,18 +72,23 @@ class Game {
     }
 
     isCompleted() {
-        return this.isCompletedCondition();
+        return this.isCompletedCondition && this.isCompletedCondition();
     }
 }
 
 class HtmlRenderer {
-    constructor(containerId) {
+    constructor(containerId, victoryPromptId) {
         this.containerId = containerId;
+        this.victoryPromptId = victoryPromptId;
     }
 
-    draw(map) {
+    draw(map, isCompleted) {
         let container = document.getElementById(this.containerId);
         container.innerHTML = '';
+        if(isCompleted){
+            let victoryPrompt = document.getElementById(this.victoryPromptId);
+            victoryPrompt.innerText = 'VICTORY!'
+        }
         for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 5; j++) {
                 let box = map[i][j];
@@ -240,7 +246,7 @@ class RodBox extends BoxTwoWide {
     }
 
     canMoveRod(direction) {
-        if(!this.hasRod){
+        if (!this.hasRod) {
             return false;
         }
         if (direction !== this.rodDirection) {
@@ -260,10 +266,10 @@ class RodBox extends BoxTwoWide {
                 if (!farSpace || !farSpace.isSegment || !farSpace.rodDirection || farSpace.rodDirection === direction)
                     return false;
             } else {
-                if(this.isFixed){
+                if (this.isFixed) {
                     return false;
                 }
-                if(!closeSpace.rodDirection || closeSpace.rodDirection === direction){
+                if (!closeSpace.rodDirection || closeSpace.rodDirection === direction) {
                     return false;
                 }
             }
@@ -379,153 +385,13 @@ function start() {
 }
 
 function startTestPlayground() {
-    let renderer = new HtmlRenderer(GAMECONTAINERID);
-    let game = initializeActualGame(renderer);
+    let renderer = new HtmlRenderer(GAMECONTAINERID, VICTORYPROMPTID);
+    let game = initializeActualGame();
+    game.renderer = renderer;
     initializeDragHandlers(game);
     game.draw();
     window.addEventListener('keypress', () => { solver.runStep() })
     console.log(game.getBlocks());
-}
-
-function startNodeJS(){
-    let game = initializeActualGame();
-    game.draw();
-    let solver = new PuzzleSolver(() => initializeActualGame())
-    solver.solve();
-    console.log(game.getBlocks());
-}
-class PuzzleSolver {
-    constructor(createGameFunction) {
-        this.createGame = createGameFunction;
-        this.visitedStates = new Set();
-        this.visitedStateDepth = {};
-        //this.refreshPromise();
-        this.shortestResult;
-        this.totalSteps = 0;
-        this.statesRereached = 0;
-    }
-
-    updateScreen(currentDepth){
-        if(this.shortestResult){
-            document.getElementById('longestSolution').innerHTML = this.shortestResult.length;
-        }
-        if(this.visitedStates){
-            document.getElementById('statesReached').innerHTML = this.visitedStates.size;
-        }
-        if(this.statesRereached){
-            document.getElementById('statesRereached').innerHTML = this.statesRereached;
-        }
-        if(this.totalSteps){
-            document.getElementById('totalSteps').innerHTML = this.totalSteps;
-        }
-        if(currentDepth){
-            document.getElementById('currentDepth').innerHTML = currentDepth;
-        }
-    }
-
-    writeToConsole(currentDepth){
-        let shortestResultLength = this.shortestResult && this.shortestResult.length
-        console.log(`total steps: ${this.totalSteps}, current depth: ${currentDepth},shortest solution: ${shortestResultLength}, states reached: ${this.visitedStates.size}, `)
-    }
-
-    runMoves(moves) {
-        let game = this.createGame();
-        for (let move of moves) {
-            game.move(move.line, move.column, move.direction);
-        }
-        return game;
-    }
-
-    refreshPromise(game, currentDepth) {
-        this.promise = new Promise((resolve, reject) => {
-            this.resolve = resolve;
-        })
-        if(this.totalSteps % 2000000){
-            this.resolve();
-            return;
-        }
-        this.updateScreen(currentDepth);
-        if(game)
-            game.draw();
-    }
-
-    runStep() {
-        this.resolve();
-    }
-
-    updateVisitedState(state, depth){
-        this.visitedStates.add(state);
-        if(!this.visitedStateDepth[state] || this.visitedStateDepth[state] > depth){
-            this.visitedStateDepth[state] = depth;
-        }
-    }
-
-    async solve() {
-        let solution = await this.recursiveStep([])
-        console.log(this.shortestResult);
-    }
-
-    async recursiveStep(moves) {
-        let game = this.runMoves(moves);
-        //await this.promise;
-        //this.refreshPromise(game, moves.length);
-        if(this.totalSteps % 1000 === 0)
-            this.writeToConsole(moves.length)
-        this.totalSteps++;
-        let state = game.getStateString();
-        if (this.visitedStates.has(state) && this.visitedStateDepth[state] < moves.length) {
-            this.statesRereached ++;
-            return false;
-        }
-        this.updateVisitedState(state, moves.length);
-        if(this.shortestResult && this.shortestResult.length < moves.length){
-            //console.log(`going too deep - shortest: ${this.shortestResult && this.shortestResult.length} - current: ${moves.length}`)
-            return false;
-        }
-        if (game.isCompleted()) {
-            console.log(`found solution - length ${moves.length}`)
-            if (!this.shortestResult || this.shortestResult.length > moves.length) {
-                this.shortestResult = moves;
-            }
-            return;
-        }
-        let possibleMoves = this.getPossibleMoves(game);
-        shuffle(possibleMoves);
-        for (let move of possibleMoves) {
-            await this.recursiveStep([...moves, move]);
-        }
-    }
-
-    getPossibleMoves(game) {
-        let possibleMoves = [];
-        let blocks = game.getBlocks();
-        for (let block of blocks) {
-            for (let direction of DIRECTIONS) {
-                if (block.isMoveValid(direction)) {
-                    possibleMoves.push({ line: block.line, column: block.column, direction });
-                }
-            }
-        }
-        return possibleMoves;
-    }
-}
-
-startNodeJS();
-
-function initializeSimpleGame(renderer) {
-    let game = new Game(renderer);
-    new BoxTwoTall(game, 0, 0, true);
-    new RodBoxRight(game, 0, 1, true, true);
-    new RodBoxMiddleSegment(game, 0, 3);
-    new RodBoxLeftSegment(game, 0, 4);
-    new Box(game, 2, 0, true);
-    new RodBoxRightSegment(game, 2, 1);
-    new BoxTwoWide(game, 3, 0, true);
-    new BoxTwoWide(game, 3, 2, true);
-    new BoxTwoTall(game, 2, 4);
-    let final = new RodBoxLeft(game, 2, 3, true);
-    game.setCompletedCondition(() => final.hasRod);
-    return game;
 }
 
 function initializeActualGame() {
@@ -546,26 +412,6 @@ function initializeActualGame() {
     game.setCompletedCondition(() => final.hasRod);
     return game;
 }
-
-
-function shuffle(array) {
-    var currentIndex = array.length, temporaryValue, randomIndex;
-  
-    // While there remain elements to shuffle...
-    while (0 !== currentIndex) {
-  
-      // Pick a remaining element...
-      randomIndex = Math.floor(Math.random() * currentIndex);
-      currentIndex -= 1;
-  
-      // And swap it with the current element.
-      temporaryValue = array[currentIndex];
-      array[currentIndex] = array[randomIndex];
-      array[randomIndex] = temporaryValue;
-    }
-  
-    return array;
-  }
 
 function initializeDragHandlers(game) {
     let container = document.getElementById(GAMECONTAINERID);
